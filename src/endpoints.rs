@@ -1,4 +1,4 @@
-use crate::models::{User, UserTweet};
+use crate::models::{timeline, FollowRelation, User, UserTweet};
 use async_session::{Session, SessionStore as _};
 use async_sqlx_session::MySqlSessionStore;
 use axum::{
@@ -24,6 +24,8 @@ pub async fn run_server(
         .route("/api/users", post(create_user))
         .route("/api/sessions", post(create_session))
         .route("/api/user_tweets", post(create_user_tweet))
+        .route("/api/follow_relations", post(create_follow_relation))
+        .route("/api/pages/timeline", get(get_timeline))
         .layer(Extension(arc_pool))
         .layer(Extension(session_store));
 
@@ -107,7 +109,7 @@ pub(crate) async fn create_session(
     Json(payload): Json<CreateSessionParams>,
     arc_pool: Extension<Arc<Pool<MySql>>>,
     session_store: Extension<MySqlSessionStore>,
-    mut cookie_jar: CookieJar,
+    cookie_jar: CookieJar,
 ) -> impl IntoResponse {
     match User::find_by_name(&payload.name, &arc_pool).await {
         // TODO: nestを浅くする
@@ -166,5 +168,59 @@ pub(crate) async fn create_user_tweet(
                 Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
             }
         }
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Follow API
+/////////////////////////////////////////////////////////////////////////////
+#[derive(serde::Deserialize)]
+pub struct CreateFollowRelationParams {
+    pub name: String,
+}
+
+pub(crate) async fn create_follow_relation(
+    Json(payload): Json<CreateFollowRelationParams>,
+    arc_pool: Extension<Arc<Pool<MySql>>>,
+    session: CurrentSession,
+) -> impl IntoResponse {
+    match session.0.get::<u64>("user_id") {
+        Some(user_id) => {
+            let result = User::find_by_name(&payload.name, &arc_pool).await;
+            match result {
+                Ok(followee) => match followee {
+                    Some(followee) => {
+                        let follow_relation = FollowRelation {
+                            id: None,
+                            followee_id: followee.id.unwrap(),
+                            follower_id: user_id,
+                        };
+                        match follow_relation.insert(&arc_pool).await {
+                            Ok(_) => Ok(StatusCode::CREATED),
+                            Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+                        }
+                    }
+                    None => Err(StatusCode::BAD_REQUEST),
+                },
+                Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+            }
+        }
+        None => Err(StatusCode::UNAUTHORIZED),
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Timeline API
+/////////////////////////////////////////////////////////////////////////////
+pub(crate) async fn get_timeline(
+    arc_pool: Extension<Arc<Pool<MySql>>>,
+    session: CurrentSession,
+) -> impl IntoResponse {
+    match session.0.get::<u64>("user_id") {
+        Some(user_id) => match timeline(user_id, &arc_pool).await {
+            Ok(tweets) => Ok(Json(tweets)),
+            Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+        },
+        None => Err(StatusCode::UNAUTHORIZED),
     }
 }

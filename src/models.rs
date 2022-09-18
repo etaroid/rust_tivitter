@@ -1,5 +1,10 @@
 use sqlx::mysql::{MySqlPoolOptions, MySqlQueryResult};
 use sqlx::{Executor, MySql, Pool};
+use std::collections::HashSet;
+
+/////////////////////////////////////////////////////////////////////////////
+// DB Setup & Connection Setting
+/////////////////////////////////////////////////////////////////////////////
 
 // DB接続先情報
 pub const DB_STRING_PRODUCTION: &'static str = "mysql://user:password@localhost:53306/production";
@@ -37,7 +42,9 @@ fn panic_except_duplicate_key(query_result: Result<MySqlQueryResult, sqlx::Error
     };
 }
 
+/////////////////////////////////////////////////////////////////////////////
 // User
+/////////////////////////////////////////////////////////////////////////////
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct User {
     pub id: Option<u64>,
@@ -66,7 +73,9 @@ impl User {
     }
 }
 
-// UserTweet
+/////////////////////////////////////////////////////////////////////////////
+// User Tweet
+/////////////////////////////////////////////////////////////////////////////
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct UserTweet {
     pub id: Option<u64>,
@@ -93,7 +102,9 @@ impl UserTweet {
     }
 }
 
-// FollowRelation
+/////////////////////////////////////////////////////////////////////////////
+// Follow Relation
+/////////////////////////////////////////////////////////////////////////////
 #[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
 pub struct FollowRelation {
     pub id: Option<u64>,
@@ -106,4 +117,72 @@ impl FollowRelation {
         pool.execute(include_str!("../sql/ddl/follow_relations_create.sql"))
             .await
     }
+    pub async fn insert(&self, pool: &Pool<MySql>) -> Result<MySqlQueryResult, sqlx::Error> {
+        let sql = format!(
+            r#"INSERT INTO {} (followee_id, follower_id) VALUES (?, ?);"#,
+            Self::TABLE_NAME
+        );
+        let result = sqlx::query(&sql)
+            .bind(self.followee_id)
+            .bind(self.follower_id)
+            .execute(pool)
+            .await;
+        result
+    }
+    pub async fn find_by_follower_id(
+        follower_id: u64,
+        pool: &Pool<MySql>,
+    ) -> Result<Vec<Self>, sqlx::Error> {
+        let sql = format!(
+            r#"SELECT * FROM {} WHERE follower_id = ?;"#,
+            Self::TABLE_NAME
+        );
+        let result = sqlx::query_as::<_, Self>(&sql)
+            .bind(follower_id)
+            .fetch_all(pool)
+            .await;
+        result
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// Timeline
+/////////////////////////////////////////////////////////////////////////////
+#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize, sqlx::FromRow)]
+pub struct TimelineItem {
+    name: String,
+    content: String,
+}
+
+pub async fn timeline(
+    follower_id: u64,
+    pool: &Pool<MySql>,
+) -> Result<Vec<TimelineItem>, sqlx::Error> {
+    // TODO: Pagination
+    let mut ids = FollowRelation::find_by_follower_id(follower_id, &pool)
+        .await?
+        .into_iter()
+        .map(|r| r.followee_id)
+        .collect::<HashSet<_>>();
+
+    ids.insert(follower_id); // timelineには自分のTweetも含める
+                             // note: 現在のsqlxはIN句に配列をbindできないため、自前で以下のように実装
+    let placeholders = format!("?{}", ",?".repeat(ids.len() - 1));
+    let sql = format!(
+        r#"
+            SELECT users.name as name, user_tweets.content as content
+            FROM user_tweets
+            INNER JOIN users
+            ON user_tweets.user_id = users.id
+            WHERE user_id IN ({})
+            ORDER BY user_tweets.id DESC;
+        "#,
+        placeholders
+    );
+    let mut query = sqlx::query_as::<_, TimelineItem>(&sql);
+    for id in ids {
+        query = query.bind(id);
+    }
+    let result = query.fetch_all(pool).await;
+    result
 }
