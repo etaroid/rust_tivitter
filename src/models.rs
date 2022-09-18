@@ -49,6 +49,11 @@ impl User {
         pool.execute(include_str!("../sql/ddl/users_create.sql"))
             .await
     }
+    pub async fn insert(&self, pool: &Pool<MySql>) -> Result<MySqlQueryResult, sqlx::Error> {
+        let sql = format!(r#"INSERT INTO {} (name) VALUES (?);"#, Self::TABLE_NAME);
+        let result = sqlx::query(&sql).bind(&self.name).execute(pool).await;
+        result
+    }
 }
 
 // UserTweet
