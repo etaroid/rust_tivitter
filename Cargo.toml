@@ -26,3 +26,7 @@ sqlx = {version = "0.6.0", features = ["runtime-tokio-native-tls", "mysql", "chr
 cookie = "0.16.0"
 # 非同期ランタイムライブラリ
 tokio = {version = "1.17.0", features = ["full"]}
+
+[[bin]]
+name = "init_db"
+path = "src/init_db.rs"

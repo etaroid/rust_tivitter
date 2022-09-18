@@ -25,6 +25,10 @@ cargo test -- --test-threads=1 # run test
 
 ## Debug Commands
 ```
+mysql -u root -h 127.0.0.1 --ssl-mode=DISABLED --get-server-public-key -P 53306  -p
+```
+
+```
 curl -X POST -H "Content-Type: application/json" -d '{"name":"test123"}' http://localhost:8888/api/users # ユーザ新規作成挙動の確認
 curl -X POST -H "Content-Type: application/json" -d '{"name":"test123"}' -c cookie.txt http://localhost:8888/api/sessions # ログイン挙動とCookieの保存
 curl -X POST -H "Content-Type: application/json" -d '{"content":"some tweet"}' -b cookie.txt http://localhost:8888/api/user_tweets # Cookieを使用してメモ作成
