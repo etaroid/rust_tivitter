@@ -1,6 +1,6 @@
-use std::sync::Arc;
 use rust_tivitter::endpoints::run_server;
 use rust_tivitter::models::{create_pool, create_tokio_runtime, DB_STRING_PRODUCTION};
+use std::sync::Arc;
 
 fn main() -> anyhow::Result<()> {
     let tokio_rt = create_tokio_runtime();

@@ -49,6 +49,16 @@ impl User {
         pool.execute(include_str!("../sql/ddl/users_create.sql"))
             .await
     }
+
+    pub async fn find_by_name(name: &str, pool: &Pool<MySql>) -> Result<Option<User>, sqlx::Error> {
+        let sql = format!(r#"SELECT * FROM {} WHERE name = ?;"#, Self::TABLE_NAME);
+        let result = sqlx::query_as::<_, User>(&sql)
+            .bind(name)
+            .fetch_optional(pool)
+            .await;
+        result
+    }
+
     pub async fn insert(&self, pool: &Pool<MySql>) -> Result<MySqlQueryResult, sqlx::Error> {
         let sql = format!(r#"INSERT INTO {} (name) VALUES (?);"#, Self::TABLE_NAME);
         let result = sqlx::query(&sql).bind(&self.name).execute(pool).await;
