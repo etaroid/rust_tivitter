@@ -1,0 +1,6 @@
+CREATE TABLE IF NOT EXISTS user_tweets (
+   id SERIAL,
+   user_id BIGINT UNSIGNED NOT NULL,
+   content VARCHAR(140),
+   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
