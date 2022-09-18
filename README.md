@@ -1,8 +1,10 @@
 # rust_tivitter
 
-Tivitter API server implemented in Rust.
+Tivitter simple API server implemented in Rust.
 
 Tivitter is a SNS for people who have wet their pants.
+
+
 
 ## Requirements
 ```
