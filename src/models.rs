@@ -79,6 +79,18 @@ impl UserTweet {
         pool.execute(include_str!("../sql/ddl/user_tweets_create.sql"))
             .await
     }
+    pub async fn insert(&self, pool: &Pool<MySql>) -> Result<MySqlQueryResult, sqlx::Error> {
+        let sql = format!(
+            r#"INSERT INTO {} (user_id, content) VALUES (?, ?);"#,
+            Self::TABLE_NAME,
+        );
+        let result = sqlx::query(&sql)
+            .bind(&self.user_id)
+            .bind(&self.content)
+            .execute(pool)
+            .await;
+        result
+    }
 }
 
 // FollowRelation

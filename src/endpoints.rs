@@ -1,5 +1,5 @@
-use crate::models::User;
-use async_session::{Session, SessionStore};
+use crate::models::{User, UserTweet};
+use async_session::{Session, SessionStore as _};
 use async_sqlx_session::MySqlSessionStore;
 use axum::{
     extract::{Extension, FromRequest, Json, RequestParts},
@@ -9,11 +9,12 @@ use axum::{
     Router,
 };
 use axum_extra::extract::cookie::{Cookie, CookieJar};
-use sqlx::mysql::MySqlQueryResult;
-use sqlx::{Error, MySql, Pool};
-use std::future::Future;
+use sqlx::{MySql, Pool};
 use std::sync::Arc;
 
+/////////////////////////////////////////////////////////////////////////////
+// API Server Setting & Run
+/////////////////////////////////////////////////////////////////////////////
 pub async fn run_server(
     arc_pool: Arc<Pool<MySql>>,
     session_store: MySqlSessionStore,
@@ -22,6 +23,7 @@ pub async fn run_server(
     let app = Router::new()
         .route("/api/users", post(create_user))
         .route("/api/sessions", post(create_session))
+        .route("/api/user_tweets", post(create_user_tweet))
         .layer(Extension(arc_pool))
         .layer(Extension(session_store));
 
@@ -33,7 +35,46 @@ pub async fn run_server(
 
 pub struct CurrentSession(Session);
 const AXUM_SESSION_COOKIE_KEY: &'static str = "axum_session";
+// https://github.com/tokio-rs/axum/blob/main/examples/sessions/src/main.rsを改変
+// axumのカスタムextractorを定義
+// クッキーに格納されたセッションキーからセッションデータを復元する
+#[axum::async_trait]
+impl<B> FromRequest<B> for CurrentSession
+where
+    B: Send,
+{
+    type Rejection = StatusCode;
+    async fn from_request(req: &mut RequestParts<B>) -> Result<Self, Self::Rejection> {
+        // MySQLセッションストアを参照する
+        let Extension(store) = Extension::<MySqlSessionStore>::from_request(req)
+            .await
+            .unwrap();
+        // ブラウザから送信されたクッキーを参照する
+        let cookie = CookieJar::from_request(req).await.unwrap();
+        // クッキーからセッションキーを取得
+        let session_id = cookie
+            .get(AXUM_SESSION_COOKIE_KEY)
+            .map(|cookie| cookie.value())
+            .unwrap_or("")
+            .to_string();
+        // セッションキーからセッションデータを復元する
+        let session_data = store.load_session(session_id).await;
+        match session_data {
+            Ok(session_data) => match session_data {
+                // セッションデータが存在＝セッションデータを返す
+                Some(session_data) => Ok(CurrentSession(session_data)),
+                // セッションデータが存在しない＝ログインできていない
+                None => Err(StatusCode::UNAUTHORIZED),
+            },
+            // RDBとの接続が切れている可能性がある、500を返す
+            Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+        }
+    }
+}
 
+/////////////////////////////////////////////////////////////////////////////
+// User API
+/////////////////////////////////////////////////////////////////////////////
 #[derive(serde::Deserialize)]
 pub struct CreateUserParams {
     pub name: String,
@@ -54,6 +95,9 @@ pub(crate) async fn create_user(
     }
 }
 
+/////////////////////////////////////////////////////////////////////////////
+// Session API
+/////////////////////////////////////////////////////////////////////////////
 #[derive(serde::Deserialize)]
 pub struct CreateSessionParams {
     pub name: String,
@@ -93,5 +137,34 @@ pub(crate) async fn create_session(
             }
         }
         Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+    }
+}
+
+/////////////////////////////////////////////////////////////////////////////
+// User Tweet API
+/////////////////////////////////////////////////////////////////////////////
+#[derive(serde::Deserialize)]
+pub struct CreateUserTweetParams {
+    pub content: String,
+}
+
+pub(crate) async fn create_user_tweet(
+    Json(payload): Json<CreateUserTweetParams>,
+    arc_pool: Extension<Arc<Pool<MySql>>>,
+    session: CurrentSession,
+) -> impl IntoResponse {
+    match session.0.get::<u64>("user_id") {
+        None => Err(StatusCode::UNAUTHORIZED),
+        Some(user_id) => {
+            let tweet = UserTweet {
+                id: None,
+                content: payload.content,
+                user_id,
+            };
+            match tweet.insert(&arc_pool).await {
+                Ok(_) => Ok(StatusCode::CREATED),
+                Err(_) => Err(StatusCode::SERVICE_UNAVAILABLE),
+            }
+        }
     }
 }
