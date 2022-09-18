@@ -1,4 +1,6 @@
-use rust_tivitter::models::{create_pool, create_tokio_runtime, DB_STRING_PRODUCTION, setup_tables};
+use rust_tivitter::models::{
+    create_pool, create_tokio_runtime, setup_tables, DB_STRING_PRODUCTION,
+};
 
 fn main() -> anyhow::Result<()> {
     let tokio_rt = create_tokio_runtime();

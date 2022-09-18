@@ -1,5 +1,5 @@
-use sqlx::{Executor, MySql, Pool};
 use sqlx::mysql::{MySqlPoolOptions, MySqlQueryResult};
+use sqlx::{Executor, MySql, Pool};
 
 // DB接続先情報
 pub const DB_STRING_PRODUCTION: &'static str = "mysql://user:password@localhost:53306/production";
@@ -26,11 +26,11 @@ pub async fn setup_tables(pool: &Pool<MySql>) {
 // MySQLはINDEXにIF NOT EXISTSを宣言できないため、duplicate keyエラー以外の場合にpanicするように自前実装
 fn panic_except_duplicate_key(query_result: Result<MySqlQueryResult, sqlx::Error>) {
     if let Err(e) = query_result {
-       let is_duplicate_index_error = e
-           .as_database_error()
-           .unwrap()
-           .message()
-           .starts_with("Duplicate key name");
+        let is_duplicate_index_error = e
+            .as_database_error()
+            .unwrap()
+            .message()
+            .starts_with("Duplicate key name");
         if !is_duplicate_index_error {
             panic!("Error except duplicate key");
         }
@@ -46,7 +46,8 @@ pub struct User {
 impl User {
     pub const TABLE_NAME: &'static str = "users";
     pub async fn create_table(pool: &Pool<MySql>) -> Result<MySqlQueryResult, sqlx::Error> {
-        pool.execute(include_str!("../sql/ddl/users_create.sql")).await
+        pool.execute(include_str!("../sql/ddl/users_create.sql"))
+            .await
     }
 }
 
@@ -60,7 +61,8 @@ pub struct UserTweet {
 impl UserTweet {
     pub const TABLE_NAME: &'static str = "user_tweets";
     pub async fn create_table(pool: &Pool<MySql>) -> Result<MySqlQueryResult, sqlx::Error> {
-        pool.execute(include_str!("../sql/ddl/user_tweets_create.sql")).await
+        pool.execute(include_str!("../sql/ddl/user_tweets_create.sql"))
+            .await
     }
 }
 
@@ -74,6 +76,7 @@ pub struct FollowRelation {
 impl FollowRelation {
     pub const TABLE_NAME: &'static str = "follow_relations";
     pub async fn create_table(pool: &Pool<MySql>) -> Result<MySqlQueryResult, sqlx::Error> {
-        pool.execute(include_str!("../sql/ddl/follow_relations_create.sql")).await
+        pool.execute(include_str!("../sql/ddl/follow_relations_create.sql"))
+            .await
     }
 }
